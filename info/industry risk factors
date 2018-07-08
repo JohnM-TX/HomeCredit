@@ -1,0 +1,39 @@
+
+### Lending Club Factors
+Base rate
+Adjustment for risk and volatility based on loan grade, which is a binned fico score
+Loan Amount Limits - there is a set limit per grade, if the loan exceeds the limit, the borrower gets downgraded
+There are 35 separate grades
+Other modifiers - items from a credit report that are similar to what is used in a FICO score
+
+
+
+
+### Prosper Factors
+Credit Score (Experian Scorex Plus)
+Prosper score - binned from 1-10 based on application and bureau reports
+Blended score translates to a rating and an associated loss rate
+More weight is given to Prosper's score based on their borrowers,  vs. Bureau non-propsper rankings/score
+Specific key variables:
+- number of trades
+- number of delinquent accounts
+- number of inquiries
+- number of recent opens
+- amount of available credit on bank cards
+- bankcard utilization
+
+Self-employment is a big risk factor
+
+
+
+
+### FICO Score key factors - all binned
+Months since last derogatory record 
+Avg balance on revolving trades
+Number of months credit history
+Number of inquiireis
+Number of bankcard trade lines
+Length since using active accounts
+Length of specific accounts, not just the longest - get max, min, avg, sd
+Mix of credit cards, retail accounts, installment loans, finance company accounts and mortgage loans
+
