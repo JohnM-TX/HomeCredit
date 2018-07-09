@@ -10,53 +10,82 @@ pd.options.display.max_columns = 100
 import holoviews as hv
 hv.extension('bokeh')
 
+import seaborn as sns
+
 from pandas_profiling import ProfileReport
 import missingno as msno
 from eda.discover import discover
 
 
-#%% get data
+
+
+#%% get data and peek
 train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
 test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
 test['TARGET'] = 2
 print (train.shape, '\n', test.shape)
+train.head()
+test.head()
 
 traintest = pd.concat([train, test], sort=False).sort_index()
 traintest.head().T
 
+#%% for demo only: reduce features...
+dropstrings = ['FLAG', 'AVG', 'MODE', 'MEDI']
 
-# In[ ]:
+trainlite = train.copy()
+for d in dropstrings:
+    trainlite.drop(trainlite.filter(like = d).columns, axis = 1, inplace=True)
+trainlite.shape
 
-ProfileReport(train)
+traintestlite = traintest[trainlite.columns]
+traintestlite.shape
 
 
-# In[ ]:
 
-traintest.drop('TARGET', axis=1).duplicated(keep=False).sum()
+################################
+#### Perform some EDA ####
+################################
+
+#%% get automated description
+ProfileReport(trainlite)
 
 
-# In[ ]:
+#%% check for patterns
+traintestlite.AMT_CREDIT.sample(frac = 0.05).plot()
+traintestlite.reset_index().SK_ID_CURR.plot()
+trainlite.TARGET.sample(frac = 0.05).plot()
 
+#%% check duplicate rows and constant columns
+traintestlite.drop('TARGET', axis=1).duplicated(keep=False).sum()
+consts = traintestlite.nunique(axis=0)
+consts[consts ==1]
+
+#%% check correlated columns and scatters
+corr = traintestlite.corr()
+sns.heatmap(corr, 
+            xticklabels=corr.columns.values,
+            yticklabels=corr.columns.values)
+corr
+pd.scatter_matrix(traintestlite.iloc[:, 2:6].sample(frac = 0.01))
+
+#%% check missing variable structure
 msno.matrix(traintest, filter=None, n=0, p=0, sort=None,
            figsize=(25, 15), width_ratios=(15, 1), color=(0.25, 0.25, 0.25),
            fontsize=8, labels=None, sparkline=True, inline=True,
            freq=None)
 
 
-# In[ ]:
+#%% check distros for numericals
+get_ipython().run_cell_magic('opts', 'Distribution  [height=240 width=240]
+allnums = traintestlite.drop('TARGET', axis = 1).select_dtypes(include='float')
+plot_list = [hv.Distribution(train[c])*hv.Distribution(test[c]) for c in allnums.columns]
+pltmat = hv.Layout(plot_list)
+pltmat
 
+# see dotplot from kernels for more numericals
 
-get_ipython().run_cell_magic('opts', 'Distribution  [height=240 width=240]', "\nallnums = traintest.drop('TARGET', axis = 1).select_dtypes(include='float')\nplot_list = [hv.Distribution(train[c])*hv.Distribution(test[c]) for c in allnums.columns]\ntrains = hv.Layout(plot_list)\ntrains")
-
-
-# In[ ]:
-
-all.dtypes
-
-
-# In[3]:
-
-# cat columns differences
+#%% check cat columns differences
 allobjs = traintest.select_dtypes(include='object')
 for c in allobjs.columns:
     s1 = set(train[c].unique())
@@ -68,33 +97,24 @@ for c in allobjs.columns:
         print('{}, "{}": {} in train, {} in test'.format(c,d,tnrows, tsrows))
 
 
-# In[9]:
+#%% run scatterplots v target:
 
-get_ipython().run_cell_magic('opts', 'Scatter  [height=240 width=240, xaxis=None, yaxis=None]', "\nallnums = traintest.drop('TARGET', axis = 1).select_dtypes(include='float')\nplot_list = [hv.Scatter(traintest, 'SK_ID_CURR', c) for c in allnums.columns[1:2]] ####\ntrains = hv.Layout(plot_list)\ntrains")
+get_ipython().run_cell_magic('opts', 'Scatter  [height=240 width=240, xaxis=None, yaxis=None]
+allnums = traintest.drop('TARGET', axis = 1).select_dtypes(include='float')
+plot_list = [hv.Scatter(traintest, 'SK_ID_CURR', c) for c in allnums.columns[1:2]] ####
+trains = hv.Layout(plot_list)
+trains
 
-
-# In[13]:
-
-get_ipython().run_cell_magic('opts', 'Scatter  [height=240 width=240, xaxis=None, yaxis=None]', "\nallcats = traintest.drop('TARGET', axis = 1).select_dtypes(include='object')\nfor c in allcats.columns:\n    traintest[c] = traintest[c].astype('category').cat.codes\n")
-
-
-# In[16]:
-
-
-plot_list = [hv.Scatter(traintest, 'TARGET', c) for c in allcats.columns[1:3]] ####
+get_ipython().run_cell_magic('opts', 'Scatter  [height=240 width=240, xaxis=None, yaxis=None]
+allcats = traintest.drop('TARGET', axis = 1).select_dtypes(include='object')
+for c in allcats.columns:
+    traintest[c] = traintest[c].astype('category').cat.codes
+    plot_list = [hv.Scatter(traintest, 'TARGET', c)] ####
 trains = hv.Layout(plot_list)
 trains
 
 
-# In[25]:
-
-
-allcats.columns[0:2]
-
-
-# In[77]:
-
-
+#%%Look at feature ratios by target value:
 def catcompare(feature):
     h = train[feature].value_counts(normalize=True)
     h_df = pd.DataFrame({'cat':h.index, 'pct':h.values})
@@ -111,25 +131,19 @@ def catcompare(feature):
     plot = macro.to.bars(kdims=['set', 'cat'], vdims='pct', groupby=[], label = feature)
     return plot
 
+get_ipython().run_cell_magic('opts', "Bars.Grouped [group_index='set']
+opts Bars [group_index=1 xrotation=45 width=480 show_legend=False tools=['hover']] 
+%%opts Bars (color=Cycle('Set2')) 
+allcats = traintest.drop('TARGET', axis = 1).select_dtypes(include='object') 
+plot_list = [] 
+for c in allcats.columns: 
+plot = catcompare(c) 
+plot_list.append(plot)
+hv.Layout(plot_list)")
 
-# In[87]:
 
-
-
-get_ipython().run_cell_magic('opts', "Bars.Grouped [group_index='set']", "%%opts Bars [group_index=1 xrotation=45 width=480 show_legend=False tools=['hover']]\n%%opts Bars (color=Cycle('Set2'))\n\nallcats = traintest.drop('TARGET', axis = 1).select_dtypes(include='object')\nplot_list = []\nfor c in allcats.columns:\n    plot = catcompare(c)\n    plot_list.append(plot)\n\nhv.Layout(plot_list)")
-
-
-# In[85]:
-
-
+#%% Much simpler countplot
 import seaborn as sns
 sns.set_style()
 tips = sns.load_dataset("tips")
 ax = sns.countplot(x="CODE_GENDER", data=train)
-
-
-# In[83]:
-
-
-tips
-
