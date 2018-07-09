@@ -31,15 +31,26 @@ traintest = pd.concat([train, test], sort=False).sort_index()
 traintest.head().T
 
 #%% for demo only: reduce features...
-dropstrings = ['FLAG', 'AVG', 'MODE', 'MEDI']
+keepers = ['SK_ID_CURR', 'AMT_INCOME_TOTAL',
+ 'AMT_CREDIT', 'AMT_ANNUITY',
+ 'AMT_GOODS_PRICE', 'NAME_EDUCATION_TYPE',
+ 'NAME_FAMILY_STATUS', 'REGION_POPULATION_RELATIVE',
+ 'DAYS_BIRTH', 'DAYS_EMPLOYED',
+ 'DAYS_REGISTRATION', 'DAYS_ID_PUBLISH',
+ 'OWN_CAR_AGE', 'OCCUPATION_TYPE',
+ 'WEEKDAY_APPR_PROCESS_START', 'HOUR_APPR_PROCESS_START',
+ 'ORGANIZATION_TYPE', 'EXT_SOURCE_1',
+ 'EXT_SOURCE_2', 'EXT_SOURCE_3',
+ 'BASEMENTAREA_AVG', 'YEARS_BUILD_AVG',
+ 'LANDAREA_AVG', 'BASEMENTAREA_MODE',
+ 'TOTALAREA_MODE', 'DAYS_LAST_PHONE_CHANGE',
+ 'AMT_REQ_CREDIT_BUREAU_QRT', 'AMT_REQ_CREDIT_BUREAU_YEAR']
 
-trainlite = train.copy()
-for d in dropstrings:
-    trainlite.drop(trainlite.filter(like = d).columns, axis = 1, inplace=True)
+trainlite = train[keepers]
 trainlite.shape
 
-traintestlite = traintest[trainlite.columns]
-traintestlite.shape
+# traintestlite = traintest[trainlite.columns]
+# traintestlite.shape
 
 
 
@@ -142,8 +153,3 @@ plot_list.append(plot)
 hv.Layout(plot_list)")
 
 
-#%% Much simpler countplot
-import seaborn as sns
-sns.set_style()
-tips = sns.load_dataset("tips")
-ax = sns.countplot(x="CODE_GENDER", data=train)
