@@ -8,7 +8,7 @@ pd.options.display.max_rows = 300
 pd.options.display.max_columns = 100
 
 import holoviews as hv
-hv.extension('bokeh')
+hv.extension('bokeh', 'matplotlib')
 
 import seaborn as sns
 
@@ -80,6 +80,13 @@ sns.heatmap(corr,
 corr
 pd.scatter_matrix(traintestlite.iloc[:, 2:6].sample(frac = 0.01))
 
+#%% scatter with hv
+%%opts Scatter [tools=['box_select', 'lasso_select', 'hover'] border=0] Histogram {+axiswise}
+table = hv.Table(macro_df, kdims=['year', 'country'])
+matrix = hv.operation.gridmatrix(table.groupby('country'))
+matrix.select(country=['West Germany', 'United Kingdom', 'United States'])
+
+
 #%% check missing variable structure
 msno.matrix(traintest, filter=None, n=0, p=0, sort=None,
            figsize=(25, 15), width_ratios=(15, 1), color=(0.25, 0.25, 0.25),
@@ -150,6 +157,6 @@ plot_list = []
 for c in allcats.columns: 
 plot = catcompare(c) 
 plot_list.append(plot)
-hv.Layout(plot_list)")
+hv.Layout(plot_list).cols(2)
 
 
