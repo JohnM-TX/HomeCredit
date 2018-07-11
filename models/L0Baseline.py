@@ -10,16 +10,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 import lightgbm as lgb
 
-import holoviews as hv
-import datashader as ds
-
-
 #%% get data and peek
 train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
 test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
 test['TARGET'] = 2
 traintest = pd.concat([train, test], sort=False).sort_index()
-traintest.head().T
+traintest.head()
 
 #%% prep for model
 for c in traintest.columns:
@@ -28,6 +24,7 @@ for c in traintest.columns:
 
 train = traintest[traintest.TARGET != 2]
 test = traintest[traintest.TARGET == 2]
+
 
 #%% split data and run model
 X = train.drop('TARGET', axis=1)
@@ -47,18 +44,9 @@ print(lmod.best_score_)
 featmat = pd.DataFrame({'feat':X.columns, 'imp':lmod.feature_importances_})
 featmat.sort_values('imp', ascending=False)
 
+#%%
 preds = lmod.predict_proba(X_val)[:, 1]
+print(roc_auc_score(y_val, preds))
 evalmat = pd.DataFrame({'labels':y_val, 'preds':preds})
-
-evalmat.head()
-roc_auc_score(y_val, preds)
-
-evalmat['rank'] = evalmat.preds.rank()
-evalmat.sort_values('rank', inplace=True)
-evalmat.head(8)
-
-#plot preds v rank, color by label
-
-hex_tiles = hv.HexTiles(evalmat, 'rank', 'preds')
-hex_tiles.options(width=500, height=400, tools=['hover'],
-                  colorbar=True)
+evalmat.sort_values('preds').head(10)
+evalmat.sort_values('preds').tail(10)

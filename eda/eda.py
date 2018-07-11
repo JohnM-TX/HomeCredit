@@ -1,5 +1,8 @@
 
 
+THIS FILE IS SUPERCEDED BY IPYNB VERSION
+
+
 #%% get libraries
 import os
 import numpy as np
