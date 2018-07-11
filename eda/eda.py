@@ -31,7 +31,7 @@ traintest = pd.concat([train, test], sort=False).sort_index()
 traintest.head().T
 
 #%% for demo only: reduce features...
-keepers = ['SK_ID_CURR', 'AMT_INCOME_TOTAL',
+keepers = ['TARGET', 'AMT_INCOME_TOTAL',
  'AMT_CREDIT', 'AMT_ANNUITY',
  'AMT_GOODS_PRICE', 'NAME_EDUCATION_TYPE',
  'NAME_FAMILY_STATUS', 'REGION_POPULATION_RELATIVE',
@@ -49,8 +49,8 @@ keepers = ['SK_ID_CURR', 'AMT_INCOME_TOTAL',
 trainlite = train[keepers]
 trainlite.shape
 
-# traintestlite = traintest[trainlite.columns]
-# traintestlite.shape
+traintestlite = traintest[trainlite.columns]
+traintestlite.shape
 
 
 
