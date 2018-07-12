@@ -33,11 +33,10 @@ if not bare:
    
     #%% treat missing values and proxies
     # traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
-
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
 
     #BAD
-    # #%% treat outliers
+    #%% treat outliers
     # traintest['AMT_INCOME_TOTAL'].clip_upper(200000, inplace=True)
     # traintest['AMT_CREDIT'].clip_upper(250000, inplace=True)
     # traintest['AMT_ANNUITY'].clip_upper(200000, inplace=True)
@@ -122,16 +121,19 @@ if not bare:
 
     #%% drop columns of no use
     USELESS_COLUMNS = ['FLAG_DOCUMENT_10',
-                    'FLAG_DOCUMENT_12',
-                    'FLAG_DOCUMENT_13',
-                    'FLAG_DOCUMENT_14',
-                    'FLAG_DOCUMENT_15',
-                    'FLAG_DOCUMENT_16',
-                    'FLAG_DOCUMENT_17',
-                    'FLAG_DOCUMENT_19',
-                    'FLAG_DOCUMENT_2',
-                    'FLAG_DOCUMENT_20',
-                    'FLAG_DOCUMENT_21']
+                       'FLAG_DOCUMENT_12',
+                       'FLAG_DOCUMENT_13',
+                       'FLAG_DOCUMENT_14',
+                       'FLAG_DOCUMENT_15',
+                       'FLAG_DOCUMENT_16',
+                       'FLAG_DOCUMENT_17',
+                       'FLAG_DOCUMENT_19',
+                       'FLAG_DOCUMENT_2',
+                       'FLAG_DOCUMENT_20',
+                       'FLAG_DOCUMENT_21',
+                       'FLAG_DOCUMENT_4',
+                       'FLAG_DOCUMENT_7',
+                       'FLAG_DOCUMENT_9']
 
 
     traintest = traintest.drop(USELESS_COLUMNS, axis=1)
