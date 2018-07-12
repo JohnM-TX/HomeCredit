@@ -34,6 +34,7 @@ if not bare:
     #%% treat missing values and proxies
     # traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
+    traintest['NEW_SCORES_STD'] = traintest.NEW_SCORES_STD.fillna(df.NEW_SCORES_STD.mean())
 
     #BAD
     #%% treat outliers
@@ -76,9 +77,7 @@ if not bare:
     traintest['children_ratio'] = traintest['CNT_CHILDREN'] / traintest['CNT_FAM_MEMBERS']
     traintest['credit_to_annuity_ratio'] = traintest['AMT_CREDIT'] / traintest['AMT_ANNUITY']
     traintest['credit_to_goods_ratio'] = traintest['AMT_CREDIT'] / traintest['AMT_GOODS_PRICE']
-    traintest['credit_to_income_ratio'] = traintest['AMT_CREDIT'] / traintest['AMT_INCOME_TOTAL']
     traintest['days_employed_percentage'] = traintest['DAYS_EMPLOYED'] / traintest['DAYS_BIRTH']
-    traintest['income_credit_percentage'] = traintest['AMT_INCOME_TOTAL'] / traintest['AMT_CREDIT']
     traintest['income_per_child'] = traintest['AMT_INCOME_TOTAL'] / (1 + traintest['CNT_CHILDREN'])
     traintest['income_per_person'] = traintest['AMT_INCOME_TOTAL'] / traintest['CNT_FAM_MEMBERS']
     traintest['payment_rate'] = traintest['AMT_ANNUITY'] / traintest['AMT_CREDIT']
@@ -89,25 +88,26 @@ if not bare:
     traintest['ANNUITY_GROUPED'] = traintest.groupby(['OCCUPATION_TYPE'])['AMT_ANNUITY'].transform('mean')
     traintest.head().T
 
-    # NUMERICAL_COLUMNS = ['AMT_ANNUITY',
-    #                     'AMT_CREDIT',
-    #                     'AMT_GOODS_PRICE',
-    #                     'AMT_INCOME_TOTAL',
-    #                     'AMT_REQ_CREDIT_BUREAU_YEAR',
-    #                     'DAYS_BIRTH',
-    #                     'EXT_SOURCE_1', 
-    #                     'EXT_SOURCE_2',
-    #                     'EXT_SOURCE_3']
+    NUMERICAL_COLUMNS = ['AMT_ANNUITY',
+                        'AMT_CREDIT',
+                        'AMT_INCOME_TOTAL',
+                        'AMT_REQ_CREDIT_BUREAU_YEAR',
+                        'DAYS_BIRTH',
+                        'EXT_SOURCE_1', 
+                        'EXT_SOURCE_2',
+                        'EXT_SOURCE_3',
+                        'OWN_CAR_AGE']
 
-    # CAT_COLUMNS =  [['OCCUPATION_TYPE'],
-    #                 ['CODE_GENDER', 'NAME_EDUCATION_TYPE'],
-    #                 ['FLAG_OWN_REALTY', 'NAME_HOUSING_TYPE'],
-    #                 ['CODE_GENDER', 'ORGANIZATION_TYPE']]
+    CAT_COLUMNS =  [['OCCUPATION_TYPE'],
+                    ['CODE_GENDER', 'NAME_EDUCATION_TYPE'],
+                    ['FLAG_OWN_REALTY', 'NAME_HOUSING_TYPE'],
+                    ['CODE_GENDER', 'ORGANIZATION_TYPE'],
+                    ['NAME_EDUCATION_TYPE', 'OCCUPATION_TYPE']]
 
-    # for agg in ['mean', 'max', 'sum']:
-    #     for numcol in NUMERICAL_COLUMNS:
-    #         for catgroup in CAT_COLUMNS:
-    #             traintest[numcol+'_'.join(catgroup)+agg] = traintest.groupby(catgroup)[numcol].transform(agg)
+    for agg in ['mean', 'max', 'min']:
+        for numcol in NUMERICAL_COLUMNS:
+            for catgroup in CAT_COLUMNS:
+                traintest[numcol+'_'.join(catgroup)+agg] = traintest.groupby(catgroup)[numcol].transform(agg)
 
     #%% more bins and flags
     traintest['long_employment'] = (traintest['DAYS_EMPLOYED'] > -2000).astype(int)
@@ -199,7 +199,7 @@ catcols
 train = traintest[traintest.TARGET != 2]
 train.shape
 
-
+#%%
 # split data and run model
 X = train.drop('TARGET', axis=1)
 y = train.TARGET
@@ -212,10 +212,10 @@ if bare:
         subsample_freq=0, colsample_bytree=0.8, silent=False) 
 
 else:
-    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=45, max_depth=8, learning_rate=0.022, 
+    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=6, learning_rate=0.022, 
         n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
-        min_child_samples=40, subsample=0.8, reg_lambda=50.0,
-        subsample_freq=0, colsample_bytree=0.8, silent=False) 
+        min_child_samples=40, subsample=0.9, reg_lambda=50.0,
+        subsample_freq=0, colsample_bytree=0.85, silent=False) 
 
 lmod.fit(X_train, y_train, eval_set=[(X_val, y_val)],  eval_metric='auc', 
     early_stopping_rounds=50, verbose=True)
@@ -230,7 +230,7 @@ featmat.sort_values('imp', ascending=False)
 
 
 
-
+#%%
 
 
 
