@@ -19,10 +19,17 @@ traintest = pd.concat([train, test], sort=False).sort_index()
 traintest.head().T
 
 
-# bare = True will go straight into modeling
-bare=False
 
-if not bare: 
+
+#%%
+
+# Level2 adds helpful steps
+# Level3 adds bureau data 
+
+Level2 = True
+Level3 = True
+
+if Level2: 
    
     
     ############################
@@ -34,7 +41,7 @@ if not bare:
     #%% treat missing values and proxies
     # traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
-    traintest['NEW_SCORES_STD'] = traintest.NEW_SCORES_STD.fillna(df.NEW_SCORES_STD.mean())
+    
 
     #BAD
     #%% treat outliers
@@ -46,7 +53,6 @@ if not bare:
     traintest = traintest[traintest.CODE_GENDER != 'XNA']
     traintest = traintest[traintest.NAME_INCOME_TYPE != 'Maternity leave']
     traintest = traintest[traintest.NAME_FAMILY_STATUS != 'Unknown']
-
 
 
 
@@ -68,9 +74,10 @@ if not bare:
     encs1 = enc1.fit_transform(X, y)
     traintest = traintest.join(encs1, rsuffix='_enc1')
 
-
-    #%% combine key numericals
+    # combine key numericals
     traintest['ext_sources_mean'] = traintest[['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']].mean(axis=1)
+    traintest['ext_sources_std'] = traintest[['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']].std(axis=1)
+
     traintest['annuity_income_percentage'] = traintest['AMT_ANNUITY'] / traintest['AMT_INCOME_TOTAL']
     traintest['car_to_birth_ratio'] = traintest['OWN_CAR_AGE'] / traintest['DAYS_BIRTH']
     traintest['car_to_employ_ratio'] = traintest['OWN_CAR_AGE'] / traintest['DAYS_EMPLOYED']
@@ -140,16 +147,55 @@ if not bare:
 
 traintest.shape
 
-
+###########################################
 #%% for round 3
+if (Level2 and Level3):
+
+    #%% add in previous applications
+    bureau = pd.read_csv('./input/raw/bureau.csv', index_col='SK_ID_BUREAU')
+    bureau.sort_values('SK_ID_CURR', inplace=True)
+    bureau.head(10).T
+
+    # add feature
+    bureau['bureau_credit_active_binary'] = (bureau['CREDIT_ACTIVE'] != 'Closed').astype(int)
+    bureau['bureau_credit_enddate_binary'] = (bureau['DAYS_CREDIT_ENDDATE'] > 0).astype(int)
 
 
-    # #%% add in previous applications
-    # prev = pd.read_csv('./input/raw/previous_application.csv', index_col='SK_ID_PREV')
-    # prev.sort_values(['SK_ID_CURR', 'DAYS_DECISION'], inplace=True).head()
+    #%%
 
-    # prev.replace(365243, np.nan, inplace=True)
-    # prev['PA_NULLCOUNT'] = prev.isnull().sum(axis=1)
+    # aggregate to applicant level
+    bureauagg = pd.DataFrame(index=bureau.SK_ID_CURR.unique())
+    bureauagg.index.name = 'SK_ID_CURR'
+
+    grouper = bureau.groupby(by=['SK_ID_CURR'])
+
+    bureauagg['bureau_credit_active_binary'] = grouper['bureau_credit_active_binary'].agg('mean').reset_index().iloc[:, 1]
+    bureauagg['bureau_credit_enddate_percentage'] = grouper['bureau_credit_enddate_binary'].agg('mean').reset_index().iloc[:, 1]
+    bureauagg['bureau_total_customer_credit'] = grouper['AMT_CREDIT_SUM'].agg('sum').reset_index().iloc[:, 1]
+    bureauagg['bureau_total_customer_debt'] = grouper['AMT_CREDIT_SUM_DEBT'].agg('sum').reset_index().iloc[:, 1]
+    bureauagg['bureau_total_customer_overdue'] = grouper['AMT_CREDIT_SUM_OVERDUE'].agg('sum').reset_index().iloc[:, 1]
+
+    bureauagg['bureau_debt_credit_ratio'] = \
+        bureauagg['bureau_total_customer_debt'] / bureauagg['bureau_total_customer_credit']
+
+
+    bureauagg['agg1'] = grouper['DAYS_CREDIT'].agg('mean').reset_index().iloc[:, 1]
+    bureauagg['agg2'] = grouper['DAYS_CREDIT'].agg('min').reset_index().iloc[:, 1]
+    bureauagg['agg3'] = grouper['DAYS_CREDIT'].agg('max').reset_index().iloc[:, 1]
+    bureauagg['agg4'] = grouper['DAYS_CREDIT'].agg('sum').reset_index().iloc[:, 1]
+    bureauagg['agg5'] = grouper['DAYS_CREDIT_UPDATE'].agg('mean').reset_index().iloc[:, 1]
+    bureauagg['agg5'] = grouper['DAYS_CREDIT_UPDATE'].agg('min').reset_index().iloc[:, 1]
+    bureauagg['agg5'] = grouper['DAYS_CREDIT_UPDATE'].agg('sum').reset_index().iloc[:, 1]
+    bureauagg['agg5'] = grouper['DAYS_CREDIT_ENDDATE'].agg('mean').reset_index().iloc[:, 1]
+    bureauagg['agg5'] = grouper['DAYS_CREDIT_ENDDATE'].agg('sum').reset_index().iloc[:, 1]
+
+
+    bureauagg.head()
+
+
+
+    # # prev.replace(365243, np.nan, inplace=True)
+    # # prev['PA_NULLCOUNT'] = prev.isnull().sum(axis=1)
 
 
     # PREVIOUS_APPLICATION_AGGREGATION_RECIPIES = []
@@ -178,8 +224,9 @@ traintest.shape
     # group_object = prev_applications_sorted.groupby(by=['SK_ID_CURR'])[
     #     'previous_application_prev_was_approved'].last().reset_index()
 
-    # merge
 
+    traintest = traintest.join(bureauagg)
+traintest.head().T
 
 
 #################
@@ -200,22 +247,28 @@ train = traintest[traintest.TARGET != 2]
 train.shape
 
 #%%
-# split data and run model
+# split data and run model (you should really use stratified k-fold here)
 X = train.drop('TARGET', axis=1)
 y = train.TARGET
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-if bare:
+if not Level2:
     lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=-1, learning_rate=0.02, 
         n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
         min_child_samples=40, subsample=1.0, reg_lambda=50.0,
         subsample_freq=0, colsample_bytree=0.8, silent=False) 
 
-else:
-    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=6, learning_rate=0.022, 
+elif not Level3:
+    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=40, max_depth=6, learning_rate=0.022, 
         n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
         min_child_samples=40, subsample=0.9, reg_lambda=50.0,
         subsample_freq=0, colsample_bytree=0.85, silent=False) 
+
+else:
+    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=80, max_depth=-1, learning_rate=0.02, 
+        n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
+        min_child_samples=40, subsample=0.9, reg_lambda=100.0,
+        subsample_freq=0, colsample_bytree=0.5, silent=False) 
 
 lmod.fit(X_train, y_train, eval_set=[(X_val, y_val)],  eval_metric='auc', 
     early_stopping_rounds=50, verbose=True)
@@ -228,6 +281,8 @@ featmat = pd.DataFrame({'feat':X.columns, 'imp':lmod.feature_importances_})
 featmat.sort_values('imp', ascending=False)
 
 
+
+# plot learning curves
 
 
 #%%
