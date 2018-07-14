@@ -144,10 +144,8 @@ if Level2:
 
 traintest.shape
 
+###########
 
-
-
-###########################################
 #%% for round 3
 
 if (Level2 and Level3):
@@ -156,7 +154,7 @@ if (Level2 and Level3):
     #### FEATURE SELECTION #####
     ############################
 
-    # Preprocess bureau.csv and bureau_balance.csv
+    # Make function for one-hot (DISABLED)
     def one_hot_encoder(df, nan_as_category = True):
         original_columns = list(df.columns)
         categorical_columns = [col for col in df.columns if df[col].dtype == 'object']
@@ -165,6 +163,7 @@ if (Level2 and Level3):
         return df, new_columns
 
 
+    # Preprocess bureau.csv and bureau_balance.csv
     def bureau_and_balance(num_rows = None, nan_as_category = True):
         bureau = pd.read_csv('./input/raw/bureau.csv', nrows = num_rows)
         bb = pd.read_csv('./input/raw/bureau_balance.csv', nrows = num_rows)
@@ -351,31 +350,31 @@ if (Level2 and Level3):
     traintest = traintest.join(bureau)
     # del bureau
     gc.collect()
-    print('segment done')
+    print('bureau segment done')
 
     prev = previous_applications()
     traintest = traintest.join(prev)
     # del prev
     gc.collect()
-    print('segment done')
+    print('prev segment done')
 
     pos = pos_cash()
     traintest = traintest.join(pos)
     # del pos
     gc.collect()
-    print('segment done')
+    print('pos segment done')
 
     ins = installments_payments()
     traintest = traintest.join(ins)
     # del ins
     gc.collect()
-    print('segment done')
+    print('ins segment done')
 
     cc = credit_card_balance()
     traintest = traintest.join(cc)
     # del cc
     gc.collect()
-    print('segment done')
+    print('cc segment done')
 
     traintest.sort_index(inplace=True)
     
@@ -435,7 +434,7 @@ featmat = pd.DataFrame({'feat':X.columns, 'imp':lmod.feature_importances_})
 featmat.sort_values('imp', ascending=False)
 drops = featmat.loc[featmat.imp == 0, 'feat'].tolist()
 
-#%% plot learning curves and tree structure
+#%% plot shap plot
 lgb.create_tree_digraph(lmod, filename='rest.gv')
 
 
