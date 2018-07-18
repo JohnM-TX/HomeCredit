@@ -7,8 +7,10 @@ import pandas as pd
 pd.options.display.max_rows = 300
 pd.options.display.max_columns = 100
 
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
+
 import lightgbm as lgb
 
 
@@ -17,6 +19,8 @@ train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
 test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
 test['TARGET'] = 2
 traintest = pd.concat([train, test], sort=False).sort_index()
+del train; del test
+
 traintest.head().T
 
 
@@ -38,8 +42,6 @@ if Level2:
 
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
 
-
-    #BAD
     #%% treat outliers
     # traintest['AMT_INCOME_TOTAL'].clip_upper(200000, inplace=True)
     # traintest['AMT_CREDIT'].clip_upper(250000, inplace=True)
@@ -69,6 +71,7 @@ if Level2:
     enc1 = ce.TargetEncoder(verbose=1)
     encs1 = enc1.fit_transform(X, y)
     traintest = traintest.join(encs1, rsuffix='_enc1')
+    del encs1
 
     # combine key numericals
     traintest['ext_sources_mean'] = traintest[['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']].mean(axis=1)
@@ -117,6 +120,7 @@ if Level2:
     #%% more bins and flags
     traintest['previous_employment'] = (traintest['DAYS_EMPLOYED'] > -2000).astype(int)
     traintest['retirement_age'] = (traintest['DAYS_BIRTH'] > -14000).astype(int)
+
 
 
     ############################
@@ -345,40 +349,33 @@ if (Level2 and Level3):
         gc.collect()
         return cc_agg
 
-
+    # run functions and merge one at a time to save memory
     bureau = bureau_and_balance()
     traintest = traintest.join(bureau)
-    # del bureau
-    gc.collect()
+    del bureau
     print('bureau segment done')
 
     prev = previous_applications()
     traintest = traintest.join(prev)
-    # del prev
-    gc.collect()
+    del prev
     print('prev segment done')
 
     pos = pos_cash()
     traintest = traintest.join(pos)
-    # del pos
-    gc.collect()
+    del pos
     print('pos segment done')
 
     ins = installments_payments()
     traintest = traintest.join(ins)
-    # del ins
-    gc.collect()
+    del ins
     print('ins segment done')
 
     cc = credit_card_balance()
     traintest = traintest.join(cc)
-    # del cc
-    gc.collect()
+    del cc
     print('cc segment done')
 
-    traintest.sort_index(inplace=True)
-    
-traintest.head(10).T
+traintest.shape
 
 
 
@@ -387,56 +384,97 @@ traintest.head(10).T
 ##################
 
 #%% prep for model
-
-catcols = []
 for c in traintest.columns:
     if traintest[c].dtype == 'object':
-        catcols.append(c)
-        traintest[c] = traintest[c].astype('category').cat.codes
-catcols
+        traintest[c] = traintest[c].astype('str')
+        traintest[c] = LabelEncoder().fit_transform(traintest[c])
+        if traintest[c].nunique() < 50:
+            traintest[c] = traintest[c].astype('category')
 
 train = traintest[traintest.TARGET != 2]
+train.dtypes[train.dtypes=='category']
 train.shape
+del(traintest)
 
-#%%
-# split data and run model (you should really use stratified k-fold here)
+#%% split data and run model (you should really use stratified k-fold here)
 X = train.drop('TARGET', axis=1)
-y = train.TARGET
+y = train['TARGET']
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
 
 if not Level2:
     lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=-1, learning_rate=0.02, 
         n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
-        min_child_samples=40, subsample=1.0, reg_lambda=50.0,
+        min_child_samples=40, subsample=1.0, reg_lambda=50.0, predict_contrib=True, 
         subsample_freq=0, colsample_bytree=0.8, silent=False) 
 
+    lmod.fit(X_train, y_train, eval_set=[(X_val, y_val)], eval_metric='auc',
+        early_stopping_rounds=50, verbose=20)
+
 elif not Level3:
-    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=40, max_depth=6, learning_rate=0.02, 
-        n_estimators=1200, subsample_for_bin=200000, objective='binary', class_weight=None, 
-        min_child_samples=40, subsample=0.9, reg_lambda=50.0,
-        subsample_freq=0, colsample_bytree=0.85, silent=False) 
+    trainDS = lgb.Dataset(X_train, label=y_train.values)
+    valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
+
+    params = {'objective':'binary',
+            'metric':'auc',
+            'boosting':'gbdt', 
+            'num_leaves':40, 
+            'max_depth':6, 
+            'learning_rate':0.02, 
+            'subsample_for_bin':200000, 
+            'class_weight':None, 
+            'min_child_samples':40, 
+            'subsample':0.9, 
+            'reg_lambda':50.0, 
+            'predict_contrib':True, 
+            'subsample_freq':0, 
+            'colsample_bytree':0.85,
+            'num_threads':3}
+
+    evalnums = {}
+    lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
+        valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
 
 else:
-    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=40, max_depth=8, learning_rate=0.02, 
-        n_estimators=1400, subsample_for_bin=200000, objective='binary', class_weight=None, 
-        min_child_samples=60, subsample=0.9, reg_lambda=10.0, reg_alpha=1.0, min_data_in_leaf=1000,
-        subsample_freq=0, colsample_bytree=0.75, silent=False) 
+    trainDS = lgb.Dataset(X_train, label=y_train.values)
+    valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
+
+    params = {'objective':'binary',
+            'metric':'auc',
+            'boosting':'gbdt', 
+            'num_leaves':40,  
+            'max_depth':8,  #6
+            'learning_rate':0.02, 
+            'subsample_for_bin':200000, 
+            'class_weight':None, 
+            'min_child_samples':60, #40
+            'subsample':0.9, 
+            'reg_lambda':10.0,  #10
+            'reg_alpha':10.0,   ###
+            'min_data_in_leaf':1000,    ###
+            'predict_contrib':True, 
+            'subsample_freq':0, 
+            'colsample_bytree':0.75,  #0.85
+            'num_threads':3}
+
+    evalnums = {}
+    lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
+        valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
 
 
-lmod.fit(X_train, y_train, eval_set=[(X_val, y_val)],  eval_metric='auc', 
-    early_stopping_rounds=50, verbose=True)
 
+#%% get model info (scikit API)
+lmod.evals_result_
+lmod.best_iteration_
 lmod.best_score_.get('valid_0')
 
-#%% get model info
-print(lmod.best_score_.get('valid_0'))
-featmat = pd.DataFrame({'feat':X.columns, 'imp':lmod.feature_importances_})
-featmat.sort_values('imp', ascending=False)
-drops = featmat.loc[featmat.imp == 0, 'feat'].tolist()
+# show learning curve (python API)
+ax = lgb.plot_metric(evalnums, metric='auc')
+plt.show()
 
-#%% plot shap plot
-lgb.create_tree_digraph(lmod, filename='rest.gv')
+# plot gains
+lgb.plot_importance(lmod, importance_type='gain', max_num_features=-1, figsize=(4,50))
 
-
-train.drop(drops, axis=1, inplace=True)
-train.shape
+# plot model tree
+graph = lgb.create_tree_digraph(lmod, 0, show_info=['split_gain', 'leaf_count'], format='pdf')
+graph.render(view=True)
