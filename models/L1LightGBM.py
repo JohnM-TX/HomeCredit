@@ -8,55 +8,64 @@ pd.options.display.max_rows = 300
 pd.options.display.max_columns = 100
 
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.metrics import roc_auc_score
 
 import lightgbm as lgb
 
+# set the level
+Level2 = False  # adds full pipeline
+Level3 = False # adds bureau data
 
-#%% get data and peek
+
+#%%################
+#### LOAD DATA ####
+###################
+if True:
 train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
 test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
-test['TARGET'] = 2
-traintest = pd.concat([train, test], sort=False).sort_index()
-del train; del test
 
-traintest.head().T
+    # treat outliers
+    print(train.shape)
+    numcols = test.select_dtypes(exclude='object').columns.tolist()
+    for n in numcols:
+        
+min_ = np.amin(test[n])
+max_ = np.amax(test[n])
+# train[n] = train[n].clip(min_, max_)
+train = train[train[n] > min_]
+train = train[train[n] < max_]
+print(train.shape)
+train[n].hist()
+
+    train = train[train.CODE_GENDER != 'XNA']
+    train = train[train.NAME_INCOME_TYPE != 'Maternity leave']
+    train = train[train.NAME_FAMILY_STATUS != 'Unknown']
+
+    test['TARGET'] = 2
+    traintest = pd.concat([train, test], sort=False).sort_index()
+    traintest.head().T
 
 
-#%%
-# Level2 adds helpful steps
-# Level3 adds bureau data 
-
-Level2 = True
-Level3 = True
-
+#%%######################
+#### PREPROCESS DATA ####
+#########################
 if Level2: 
 
-    ############################
-    #### DATA PREPROCESSING ####
-    ############################
-
-    #%% treat missing values and proxies
+    # treat missing values and proxies
     # traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
 
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
 
-    #%% treat outliers
-    # traintest['AMT_INCOME_TOTAL'].clip_upper(200000, inplace=True)
-    # traintest['AMT_CREDIT'].clip_upper(250000, inplace=True)
-    # traintest['AMT_ANNUITY'].clip_upper(200000, inplace=True)
-    # traintest['AMT_GOODS_PRICE'].clip_upper(200000, inplace=True)
-
-    traintest = traintest[traintest.CODE_GENDER != 'XNA']
-    traintest = traintest[traintest.NAME_INCOME_TYPE != 'Maternity leave']
-    traintest = traintest[traintest.NAME_FAMILY_STATUS != 'Unknown']
 
 
+    del train; del test
+    gc.collect()
 
-    ############################
-    #### FEATURE GENERATION ####
-    ############################
+#%%########################
+#### GENERATE FEATURES ####
+###########################
+if Level2: 
 
     #%% combine categories
     traintest['CATCOMB1'] = traintest['FLAG_OWN_REALTY'] + traintest['NAME_HOUSING_TYPE']
@@ -122,11 +131,10 @@ if Level2:
     traintest['retirement_age'] = (traintest['DAYS_BIRTH'] > -14000).astype(int)
 
 
-
-    ############################
-    #### FEATURE SELECTION #####
-    ############################
-
+#%%#######################
+#### SELECT FEATURES #####
+##########################
+if Level2: 
     #%% drop columns of no use
     USELESS_COLUMNS = ['FLAG_DOCUMENT_10',
                         'FLAG_DOCUMENT_12',
@@ -148,15 +156,11 @@ if Level2:
 
 traintest.shape
 
-###########
 
-#%% for round 3
-
+#%%##############################
+#### ENGINEER MORE FEATURES #####
+#################################
 if (Level2 and Level3):
-
-    ############################
-    #### FEATURE SELECTION #####
-    ############################
 
     # Make function for one-hot (DISABLED)
     def one_hot_encoder(df, nan_as_category = True):
@@ -378,31 +382,36 @@ if (Level2 and Level3):
 traintest.shape
 
 
+#%%#############
+#### MODEL ####
+###############
+# prep for model (all rounds)
+if True:
+    for c in traintest.columns:
+        if traintest[c].dtype == 'object':
+            traintest[c] = traintest[c].astype('str')
+            traintest[c] = LabelEncoder().fit_transform(traintest[c])
+            if traintest[c].nunique() < 50:
+                traintest[c] = traintest[c].astype('category')
 
-#################
-#### MODELING ####
-##################
+    train = traintest[traintest.TARGET != 2]
+    test = traintest[traintest.TARGET == 2]
 
-#%% prep for model
-for c in traintest.columns:
-    if traintest[c].dtype == 'object':
-        traintest[c] = traintest[c].astype('str')
-        traintest[c] = LabelEncoder().fit_transform(traintest[c])
-        if traintest[c].nunique() < 50:
-            traintest[c] = traintest[c].astype('category')
+    train.dtypes[train.dtypes=='category']
+    print(train.shape, test.shape)
 
-train = traintest[traintest.TARGET != 2]
-train.dtypes[train.dtypes=='category']
-train.shape
-del(traintest)
+    X = train.drop('TARGET', axis=1)
+    y = train['TARGET']
+    X_test = test.drop('TARGET', axis=1)
 
-#%% split data and run model (you should really use stratified k-fold here)
-X = train.drop('TARGET', axis=1)
-y = train['TARGET']
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    del(traintest)
+    gc.collect()
 
 
+#%% split data and run model 
 if not Level2:
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
     lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=-1, learning_rate=0.02, 
         n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
         min_child_samples=40, subsample=1.0, reg_lambda=50.0, predict_contrib=True, 
@@ -412,33 +421,44 @@ if not Level2:
         early_stopping_rounds=50, verbose=20)
 
 elif not Level3:
-    trainDS = lgb.Dataset(X_train, label=y_train.values)
-    valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
-
+    # add more parameters and use k-fold
     params = {'objective':'binary',
-            'metric':'auc',
-            'boosting':'gbdt', 
-            'num_leaves':40, 
-            'max_depth':6, 
-            'learning_rate':0.02, 
-            'subsample_for_bin':200000, 
-            'class_weight':None, 
-            'min_child_samples':40, 
-            'subsample':0.9, 
-            'reg_lambda':50.0, 
-            'predict_contrib':True, 
-            'subsample_freq':0, 
-            'colsample_bytree':0.85,
-            'num_threads':3}
+        'metric':'auc',
+        'boosting':'gbdt', 
+        'num_leaves':40, 
+        'max_depth':6, 
+        'learning_rate':0.02, 
+        'subsample_for_bin':200000, 
+        'class_weight':None, 
+        'min_child_samples':40, 
+        'subsample':0.9, 
+        'reg_lambda':50.0, 
+        'predict_contrib':True, 
+        'subsample_freq':0, 
+        'colsample_bytree':0.85,
+        'num_threads':3}
+    
+    
+    oof_preds = np.zeros_like(y)
+    cv = StratifiedKFold(n_splits=7, random_state=42)
+    for trn_idx, val_idx in cv.split(X, y):
+        X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
+        y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
+    
+        trainDS = lgb.Dataset(X_train, label=y_train.values)
+        valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
 
-    evalnums = {}
-    lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
-        valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
+        evalnums = {}
+        lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
+            valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
+
+        oof_preds[val_idx] = lmod.predict_proba(X_val, num_iteration=cv.best_iteration_)[:, 1]
+
+    roc_auc_score(y, oof_preds)
 
 else:
-    trainDS = lgb.Dataset(X_train, label=y_train.values)
-    valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
-
+    # adjust parameters to accomodate new features    
+    
     params = {'objective':'binary',
             'metric':'auc',
             'boosting':'gbdt', 
@@ -457,13 +477,24 @@ else:
             'colsample_bytree':0.75,  #0.85
             'num_threads':3}
 
-    evalnums = {}
-    lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
-        valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
+
+    cv = StratifiedKFold(n_splits=7, random_state=42)
+    for trn_idx, val_idx in cv.split(X, y):
+        X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
+        y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
+    
+        trainDS = lgb.Dataset(X_train, label=y_train.values)
+        valDS = lgb.Dataset(X_val, label=y_val.values, reference=trainDS)
+        
+        evalnums = {}
+        lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
+            valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
 
 
-
-#%% get model info (scikit API)
+#%%#############
+#### REVIEW ####
+################
+# get model info
 lmod.evals_result_
 lmod.best_iteration_
 lmod.best_score_.get('valid_0')
@@ -478,3 +509,23 @@ lgb.plot_importance(lmod, importance_type='gain', max_num_features=-1, figsize=(
 # plot model tree
 graph = lgb.create_tree_digraph(lmod, 0, show_info=['split_gain', 'leaf_count'], format='pdf')
 graph.render(view=True)
+
+
+
+#%%#############
+#### SUBMIT ####
+################
+# predict test targets
+sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
+preds = lmod.predict_proba(X_test)
+sub['TARGET'] = np.around(preds[:, 1], 4)
+sub.head()
+sub.to_csv('./subs/sub_test.csv')
+
+
+
+
+
+
+#rd1 0.7635 / 0.747
+# 0.7632 / 0.745
