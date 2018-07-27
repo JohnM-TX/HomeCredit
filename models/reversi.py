@@ -3,7 +3,8 @@
 import gc
 import pandas as pd
 import numpy as np
-
+import fastparquet
+import snappy
 
 #%% get installments data
 inst = pd.read_csv('./input/raw/installments_payments.csv')
@@ -108,7 +109,7 @@ gc.collect()
 aggs = inst_agg.append([rev_agg, cash_agg], sort=False)
 aggs = inst_agg.join(rev_agg, how='outer', rsuffix='rev')
 aggs = aggs.join(cash_agg, how='outer', rsuffix='cash')
-aggs.head(20).T
+aggs.head(20)
 
 del inst_agg
 del rev_agg
@@ -122,9 +123,21 @@ prev = pd.read_csv('./input/raw/previous_application.csv',
 
 prev = prev.loc[prev.NAME_CONTRACT_TYPE != "Consumer loans", :]
 prev = prev.loc[prev.NAME_CONTRACT_TYPE != "XNA", :]
-prev.head().T
+prev.sort_index(inplace=True)
+prev.head()
 
-prev.NAME_CONTRACT_STATUS.unique()
+
+allprev = prev.join(aggs)
+
+allprev.shape
+allprev.to_csv('./allprevs.csv')
+allprev.to_parquet('./allprevs.parq')
+
+
+
+
+
+
 
 # merge
 data = data.merge(right=avg_buro.reset_index(), how='left', on='SK_ID_CURR')
