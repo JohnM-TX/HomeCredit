@@ -14,15 +14,16 @@ from sklearn.metrics import roc_auc_score
 
 import lightgbm as lgb
 
-# set the level
-Level2 = True  # adds full pipeline
-Level3 = False # adds bureau data
-
+# set the level of complexity:
+    # level0 == basic
+    # level1 == better
+    # level2 == better + more data
+level_ = 1
 
 #%%################
 #### LOAD DATA ####
 ###################
-if True:
+if level_ >= 0:
     train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
     test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
     test['TARGET'] = 2
@@ -34,7 +35,7 @@ traintest.head().T
 #%%######################
 #### PREPROCESS DATA ####
 #########################
-if Level2: 
+if level_ >= 1: 
     # treat outliers and missings
     numcols = test.select_dtypes(exclude='object').columns.tolist()
     numcols.remove('TARGET')
@@ -59,7 +60,7 @@ traintest.head().T
 #%%########################
 #### GENERATE FEATURES ####
 ###########################
-if Level2: 
+if level_ >= 1: 
     # combine categories
     traintest['HOME_OWNER_TYPE'] = traintest['FLAG_OWN_REALTY'] + traintest['NAME_HOUSING_TYPE']
     traintest['OCC_TYPE_GENDER'] = traintest['CODE_GENDER'] + traintest['OCCUPATION_TYPE']
@@ -127,7 +128,7 @@ if Level2:
 #%%#######################
 #### SELECT FEATURES #####
 ##########################
-if Level2: 
+if level_ >= 1: 
     #%% drop columns of no use
     uselesses = ['FLAG_DOCUMENT_10',
                         'FLAG_DOCUMENT_12',
@@ -154,7 +155,7 @@ traintest.shape
 #%%##############################
 #### ENGINEER MORE FEATURES #####
 #################################
-if (Level2 and Level3):
+if level_ >= 2:
 
     # Make function for one-hot (DISABLED)
     def one_hot_encoder(df, nan_as_category = True):
@@ -380,7 +381,7 @@ traintest.shape
 #### MODEL ####
 ###############
 # prep for model (all rounds)
-if True:
+if level_ >= 0:
     objcols = traintest.select_dtypes('object')
     for c in objcols.columns:
         traintest[c] = traintest[c].astype('str')
@@ -406,7 +407,7 @@ train.head().T
 
 
 #%% split data and run model 
-if not Level2: # Level1
+if level_ == 0:
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=32, 
         stratify=y)
 
@@ -420,8 +421,7 @@ if not Level2: # Level1
 
     sub_preds = lmod.predict_proba(X_test)[:, 1]
 
-
-elif not Level3: # Level2
+elif level_ == 1:
     # add more parameters and use k-fold
     params = {'objective':'binary',
               'metric':'auc',
@@ -457,8 +457,7 @@ elif not Level3: # Level2
     
     roc_auc_score(y, oof_preds)
 
-
-else: # Level3
+else: # level2
     # adjust parameters to accomodate new features    
     
     params = {'objective':'binary',
@@ -507,7 +506,6 @@ sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
 sub['TARGET'] = np.around(sub_preds, 4)
 sub.head()
 sub.to_csv('./subs/sub_test.csv')
-
 
 
 #%%#############
