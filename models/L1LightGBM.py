@@ -9,7 +9,7 @@ pd.options.display.max_columns = 100
 
 import category_encoders as ce
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.model_selection import train_test_split,  KFold, StratifiedKFold
 from sklearn.metrics import roc_auc_score
 
 import lightgbm as lgb
@@ -18,14 +18,14 @@ import lightgbm as lgb
     # level0 == basic
     # level1 == better
     # level2 == better + more data
-level_ = 1
+level_ = 2
 
 #%%################
 #### LOAD DATA ####
 ###################
 if level_ >= 0:
-    train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
-    test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
+    train = pd.read_csv('./input/raw/application_train.csv.zip', index_col='SK_ID_CURR')
+    test = pd.read_csv('./input/raw/application_test.csv.zip', index_col='SK_ID_CURR')
     test['TARGET'] = 2
     traintest = pd.concat([train, test], sort=False).sort_index()
 
@@ -37,6 +37,7 @@ traintest.head().T
 #########################
 if level_ >= 1: 
     # treat outliers and missings
+    test.dtypes
     numcols = test.select_dtypes(exclude='object').columns.tolist()
     numcols.remove('TARGET')
     for n in numcols:
@@ -157,7 +158,7 @@ traintest.shape
 #################################
 if level_ >= 2:
 
-    # Make function for one-hot (DISABLED)
+    # Make function for one-hot
     def one_hot_encoder(df, nan_as_category = True):
         original_columns = list(df.columns)
         categorical_columns = [col for col in df.columns if df[col].dtype == 'object']
@@ -440,7 +441,7 @@ elif level_ == 1:
               'num_threads':3}
     sub_preds = np.zeros_like(test.TARGET, dtype=float)
     oof_preds = np.zeros_like(y, dtype=float)
-    cv = StratifiedKFold(n_splits=4, random_state=42)
+    cv = KFold(n_splits=4, shuffle=True, random_state=42)
     for trn_idx, val_idx in cv.split(X, y):
         X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
@@ -480,7 +481,7 @@ else: # level2
 
     sub_preds = np.zeros_like(test.TARGET, dtype=float)
     oof_preds = np.zeros_like(y, dtype=float)
-    cv = StratifiedKFold(n_splits=4, random_state=42)
+    cv = KFold(n_splits=4, shuffle=True, random_state=42)
     for trn_idx, val_idx in cv.split(X, y):
         X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
@@ -495,17 +496,17 @@ else: # level2
         oof_preds[val_idx] = lmod.predict(X_val)
         sub_preds += lmod.predict(X_test.values)/cv.n_splits
      
-    roc_auc_score(y, oof_preds)   
+roc_auc_score(y, oof_preds)   
 
 
 #%%#############
 #### SUBMIT ####
 ################
 # predict test targets
-sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
+sub = pd.read_csv('./input/raw/sample_submission.csv.zip', index_col='SK_ID_CURR')
 sub['TARGET'] = np.around(sub_preds, 4)
 sub.head()
-sub.to_csv('./subs/sub_test.csv')
+sub.to_csv('./subs/sub_testL1.csv')
 
 
 #%%#############
@@ -537,4 +538,4 @@ graph.render(view=True)
 
 # Round, CV, LB
 # rd1, 0.761, 0.746
-# rd2,  
+# rd2, 0.767, 0.766
