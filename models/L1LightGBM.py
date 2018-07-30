@@ -23,26 +23,8 @@ Level3 = False # adds bureau data
 #### LOAD DATA ####
 ###################
 if True:
-    train = pd.read_csv('./input/raw/application_train.csv.zip', index_col='SK_ID_CURR')
-    test = pd.read_csv('./input/raw/application_test.csv.zip', index_col='SK_ID_CURR')
-
-  # # treat outliers
-    # print(train.shape)
-    # numcols = test.select_dtypes(exclude='object').columns.tolist()
-    # for n in numcols:
-    #     min_ = np.amin(test[n])
-    #     max_ = np.amax(test[n])
-    #     # train[n] = train[n].clip(min_, max_)
-    #     j = train[train[n] <= min_].shape[0]
-    #     k = train[train[n] >= max_].shape[0]
-    # print(train.shape)
-
-    # train = train[train.CODE_GENDER != 'XNA']
-    # train = train[train.NAME_INCOME_TYPE != 'Maternity leave']
-    # train = train[train.NAME_FAMILY_STATUS != 'Unknown']
-
-    # traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
-
+    train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
+    test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
     test['TARGET'] = 2
     traintest = pd.concat([train, test], sort=False).sort_index()
 
@@ -53,40 +35,38 @@ traintest.head().T
 #### PREPROCESS DATA ####
 #########################
 if Level2: 
-
-    # # treat outliers and missings
-    # print(train.shape)
-    # numcols = test.select_dtypes(exclude='object').columns.tolist()
-    # for n in numcols:
-    #     min_ = np.amin(test[n])
-    #     max_ = np.amax(test[n])
-    #     # train[n] = train[n].clip(min_, max_)
-    #     j = train[train[n] <= min_].shape[0]
-    #     k = train[train[n] >= max_].shape[0]
-    # print(train.shape)
-
-    # train = train[train.CODE_GENDER != 'XNA']
-    # train = train[train.NAME_INCOME_TYPE != 'Maternity leave']
-    # train = train[train.NAME_FAMILY_STATUS != 'Unknown']
-
+    # treat outliers and missings
+    numcols = test.select_dtypes(exclude='object').columns.tolist()
+    numcols.remove('TARGET')
+    for n in numcols:
+        min_ = np.amin(test[n])
+        max_ = np.amax(test[n])
+        train[n] = train[n].clip(min_, max_)
+        
+    train = train[train.CODE_GENDER != 'XNA']
+    train = train[train.NAME_INCOME_TYPE != 'Maternity leave']
+    train = train[train.NAME_FAMILY_STATUS != 'Unknown']
+    
+    traintest = pd.concat([train, test], sort=False).sort_index()
     traintest['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
     traintest['TT_NULLCOUNT'] = traintest.isnull().sum(axis=1)
 
 del train; del test
 gc.collect()
+traintest.head().T
 
 
 #%%########################
 #### GENERATE FEATURES ####
 ###########################
 if Level2: 
-
-    #%% combine categories
-    traintest['CATCOMB1'] = traintest['FLAG_OWN_REALTY'] + traintest['NAME_HOUSING_TYPE']
-    traintest['CATCOMB2'] = traintest['CODE_GENDER'] + traintest['OCCUPATION_TYPE']
-    traintest['CATCOMB3'] = traintest['CODE_GENDER'] + traintest['FLAG_OWN_REALTY']
+    # combine categories
+    traintest['HOME_OWNER_TYPE'] = traintest['FLAG_OWN_REALTY'] + traintest['NAME_HOUSING_TYPE']
+    traintest['OCC_TYPE_GENDER'] = traintest['CODE_GENDER'] + traintest['OCCUPATION_TYPE']
+    traintest['HOME_OWNER_GENDER'] = traintest['CODE_GENDER'] + traintest['FLAG_OWN_REALTY']
 
     # encode highly cardinal categories
+    traintest['ORGANIZATION_TYPE'].nunique()
     X = traintest['ORGANIZATION_TYPE'].values
     y = traintest['TARGET'].values
 
@@ -142,14 +122,14 @@ if Level2:
     #%% more bins and flags
     traintest['previous_employment'] = (traintest['DAYS_EMPLOYED'] > -2000).astype(int)
     traintest['retirement_age'] = (traintest['DAYS_BIRTH'] > -14000).astype(int)
-    traintest.head().T
+
 
 #%%#######################
 #### SELECT FEATURES #####
 ##########################
 if Level2: 
     #%% drop columns of no use
-    USELESS_COLUMNS = ['FLAG_DOCUMENT_10',
+    uselesses = ['FLAG_DOCUMENT_10',
                         'FLAG_DOCUMENT_12',
                         'FLAG_DOCUMENT_13',
                         'FLAG_DOCUMENT_14',
@@ -165,8 +145,9 @@ if Level2:
                         'FLAG_DOCUMENT_9']
 
 
-    traintest = traintest.drop(USELESS_COLUMNS, axis=1)
+    traintest = traintest.drop(uselesses, axis=1)
 
+traintest.head().T
 traintest.shape
 
 
@@ -392,7 +373,7 @@ if (Level2 and Level3):
     del cc
     print('cc segment done')
 
-    traintest.shape
+traintest.shape
 
 
 #%%#############
@@ -400,42 +381,47 @@ if (Level2 and Level3):
 ###############
 # prep for model (all rounds)
 if True:
-    for c in traintest.columns:
-        if traintest[c].dtype == 'object':
-            traintest[c] = traintest[c].astype('str')
-            traintest[c] = LabelEncoder().fit_transform(traintest[c])
-            if traintest[c].nunique() < 50:
-                traintest[c] = traintest[c].astype('category')
+    objcols = traintest.select_dtypes('object')
+    for c in objcols.columns:
+        traintest[c] = traintest[c].astype('str')
+        traintest[c] = LabelEncoder().fit_transform(traintest[c])
+        if traintest[c].nunique() < 50:
+            traintest[c] = traintest[c].astype('category')
 
     train = traintest[traintest.TARGET != 2]
     test = traintest[traintest.TARGET == 2]
 
-    train.dtypes[train.dtypes=='category']
+    train.dtypes[train.dtypes=='category'] ####
+    train.select_dtypes('category').dtypes ####
     print(train.shape, test.shape)
 
     X = train.drop('TARGET', axis=1)
     y = train['TARGET']
     X_test = test.drop('TARGET', axis=1)
 
-    del(traintest)
+    # del(traintest)
     gc.collect()
+
+train.head().T
 
 
 #%% split data and run model 
-if not Level2:
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+if not Level2: # Level1
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=32, 
+        stratify=y)
 
-    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=-1, learning_rate=0.02, 
-        n_estimators=1000, subsample_for_bin=200000, objective='binary', class_weight=None, 
-        min_child_samples=40, subsample=1.0, reg_lambda=50.0, predict_contrib=True, 
-        subsample_freq=0, colsample_bytree=0.8, silent=False) 
+    lmod = lgb.LGBMClassifier(boosting_type='gbdt', num_leaves=35, max_depth=-1, 
+        learning_rate=0.02, n_estimators=1000, subsample_for_bin=200000, objective='binary', 
+        class_weight=None, min_child_samples=40, subsample=1.0, reg_lambda=50.0, 
+        predict_contrib=True, subsample_freq=0, colsample_bytree=0.8, silent=False) 
 
     lmod.fit(X_train, y_train, eval_set=[(X_val, y_val)], eval_metric='auc',
         early_stopping_rounds=50, verbose=20)
 
     sub_preds = lmod.predict_proba(X_test)[:, 1]
 
-elif not Level3:
+
+elif not Level3: # Level2
     # add more parameters and use k-fold
     params = {'objective':'binary',
               'metric':'auc',
@@ -454,7 +440,7 @@ elif not Level3:
               'num_threads':3}
     sub_preds = np.zeros_like(test.TARGET, dtype=float)
     oof_preds = np.zeros_like(y, dtype=float)
-    cv = StratifiedKFold(n_splits=5, random_state=42)
+    cv = StratifiedKFold(n_splits=4, random_state=42)
     for trn_idx, val_idx in cv.split(X, y):
         X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
@@ -468,10 +454,11 @@ elif not Level3:
 
         oof_preds[val_idx] = lmod.predict(X_val)
         sub_preds += lmod.predict(X_test.values)/cv.n_splits
+    
     roc_auc_score(y, oof_preds)
 
 
-else:
+else: # Level3
     # adjust parameters to accomodate new features    
     
     params = {'objective':'binary',
@@ -492,8 +479,9 @@ else:
             'colsample_bytree':0.75,  #0.85
             'num_threads':3}
 
-
-    cv = StratifiedKFold(n_splits=7, random_state=42)
+    sub_preds = np.zeros_like(test.TARGET, dtype=float)
+    oof_preds = np.zeros_like(y, dtype=float)
+    cv = StratifiedKFold(n_splits=4, random_state=42)
     for trn_idx, val_idx in cv.split(X, y):
         X_train, X_val = X.iloc[trn_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
@@ -504,13 +492,28 @@ else:
         evalnums = {}
         lmod = lgb.train(params, trainDS, num_boost_round=1400, early_stopping_rounds=50,
             valid_sets=[trainDS, valDS], evals_result=evalnums, verbose_eval=20)
+        
+        oof_preds[val_idx] = lmod.predict(X_val)
+        sub_preds += lmod.predict(X_test.values)/cv.n_splits
+     
+    roc_auc_score(y, oof_preds)   
+
+
+#%%#############
+#### SUBMIT ####
+################
+# predict test targets
+sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
+sub['TARGET'] = np.around(sub_preds, 4)
+sub.head()
+sub.to_csv('./subs/sub_test.csv')
+
 
 
 #%%#############
 #### REVIEW ####
 ################
 # get model info
-lmod.evals_result_
 lmod.best_iteration_
 lmod.best_score_.get('valid_0')
 
@@ -522,24 +525,18 @@ plt.show()
 lgb.plot_importance(lmod, importance_type='gain', max_num_features=-1, figsize=(4,50))
 
 # plot model tree
-graph = lgb.create_tree_digraph(lmod, 0, show_info=['split_gain', 'leaf_count'], format='pdf')
+graph = lgb.create_tree_digraph(lmod, 1, show_info=['split_gain', 'leaf_count'], 
+    format='pdf')
 graph.render(view=True)
 
 
 
-#%%#############
-#### SUBMIT ####
-################
-# predict test targets
-sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
-sub['TARGET'] = np.around(sub_preds[:, 1], 4)
-sub.head()
-sub.to_csv('./subs/sub_test.csv')
 
 
 
 
 
 
-#rd1 0.7635 / 0.747
-# 0.7632 / 0.745
+# Round, CV, LB
+# rd1, 0.761, 0.746
+# rd2,  

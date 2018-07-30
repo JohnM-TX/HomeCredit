@@ -5,6 +5,6 @@
 		}
 	],
 	"settings": {
-		"python.pythonPath": "C:\\Users\\JohnMiller\\Anaconda3\\envs\\pyslim\\python.exe"
+		"python.pythonPath": "/home/mjp914/anaconda3/envs/py37/bin/python"
 	}
 }
