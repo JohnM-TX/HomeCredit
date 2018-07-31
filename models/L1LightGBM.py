@@ -1,3 +1,7 @@
+###!!!!!!!!!!!!!!!!!!!!!!!!!!!!!###
+### HAVE YOU EXPLORED THE DATA? ###
+###!!!!!!!!!!!!!!!!!!!!!!!!!!!!!###
+
 
 #%% get libraries
 import os
@@ -18,14 +22,14 @@ import lightgbm as lgb
     # level0 == basic
     # level1 == better
     # level2 == better + more data
-level_ = 2
+level_ = 1
 
 #%%################
 #### LOAD DATA ####
 ###################
 if level_ >= 0:
-    train = pd.read_csv('./input/raw/application_train.csv.zip', index_col='SK_ID_CURR')
-    test = pd.read_csv('./input/raw/application_test.csv.zip', index_col='SK_ID_CURR')
+    train = pd.read_csv('./input/raw/application_train.csv', index_col='SK_ID_CURR')
+    test = pd.read_csv('./input/raw/application_test.csv', index_col='SK_ID_CURR')
     test['TARGET'] = 2
     traintest = pd.concat([train, test], sort=False).sort_index()
 
@@ -378,9 +382,9 @@ if level_ >= 2:
 traintest.shape
 
 
-#%%#############
-#### MODEL ####
-###############
+#%%##############
+#### PREDICT ####
+#################
 # prep for model (all rounds)
 if level_ >= 0:
     objcols = traintest.select_dtypes('object')
@@ -401,7 +405,7 @@ if level_ >= 0:
     y = train['TARGET']
     X_test = test.drop('TARGET', axis=1)
 
-    # del(traintest)
+    del(traintest)
     gc.collect()
 
 train.head().T
@@ -455,7 +459,7 @@ elif level_ == 1:
 
         oof_preds[val_idx] = lmod.predict(X_val)
         sub_preds += lmod.predict(X_test.values)/cv.n_splits
-    
+    np.save('./subs/oof_predsL{}.npy'.format(level_), oof_preds) 
     roc_auc_score(y, oof_preds)
 
 else: # level2
@@ -495,33 +499,34 @@ else: # level2
         
         oof_preds[val_idx] = lmod.predict(X_val)
         sub_preds += lmod.predict(X_test.values)/cv.n_splits
-     
-roc_auc_score(y, oof_preds)   
+    np.save('./subs/oof_predsL{}.npy'.format(level_), oof_preds) 
+    roc_auc_score(y, oof_preds)   
 
 
 #%%#############
 #### SUBMIT ####
 ################
 # predict test targets
-sub = pd.read_csv('./input/raw/sample_submission.csv.zip', index_col='SK_ID_CURR')
+sub = pd.read_csv('./input/raw/sample_submission.csv', index_col='SK_ID_CURR')
 sub['TARGET'] = np.around(sub_preds, 4)
 sub.head()
-sub.to_csv('./subs/sub_testL1.csv')
+sub.to_csv('./subs/sub_testL{}.csv'.format(level_))
 
 
-#%%#############
-#### REVIEW ####
-################
-# get model info
+#%%###############
+#### EVALUATE ####
+##################
+# get model info 
 lmod.best_iteration_
 lmod.best_score_.get('valid_0')
 
 # show learning curve (python API)
+# import matplotlib.pyplot as plt
 ax = lgb.plot_metric(evalnums, metric='auc')
 plt.show()
 
 # plot gains
-lgb.plot_importance(lmod, importance_type='gain', max_num_features=-1, figsize=(4,50))
+lgb.plot_importance(lmod, importance_type='gain', max_num_features=20, figsize=(4,20))
 
 # plot model tree
 graph = lgb.create_tree_digraph(lmod, 1, show_info=['split_gain', 'leaf_count'], 
@@ -529,13 +534,16 @@ graph = lgb.create_tree_digraph(lmod, 1, show_info=['split_gain', 'leaf_count'],
 graph.render(view=True)
 
 
+####################################################
 
 
-
-
-
-
+preds = pd.DataFrame({'pred':oof_preds, 'label':y}, index = X.index)
+preds.to_csv('./subs/oof_predsL{}.csv'.format(level_))
 
 # Round, CV, LB
 # rd1, 0.761, 0.746
 # rd2, 0.767, 0.766
+# rd3, 0.790, 0.793
+
+
+X.shape
